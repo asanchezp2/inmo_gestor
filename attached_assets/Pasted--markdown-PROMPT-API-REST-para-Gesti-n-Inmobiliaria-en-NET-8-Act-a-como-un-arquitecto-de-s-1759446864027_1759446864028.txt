@@ -1,0 +1,252 @@
+```markdown
+# PROMPT: API REST para Gestión Inmobiliaria en .NET 8
+
+Actúa como un arquitecto de software senior especializado en .NET y sistemas inmobiliarios. Tu objetivo es generar una aplicación completa, funcional y lista para ejecutar desde el primer intento.
+
+## 🎯 OBJETIVO
+Desarrollar una API REST en .NET 8 para gestión de propiedades inmobiliarias con arquitectura en capas, código limpio y deployment containerizado.
+
+## 📋 ESPECIFICACIONES TÉCNICAS
+
+### Stack Tecnológico
+- **.NET 8** (Web API)
+- **SQL Server** como base de datos
+- **Entity Framework Core** para ORM
+- **Swagger/OpenAPI** para documentación
+- **Docker** para containerización
+
+### Arquitectura
+- **Patrón en capas**: Presentation (API) → Application (Services) → Domain (Entities) → Infrastructure (Data Access)
+- **Repository Pattern** para acceso a datos
+- **DTOs** para transferencia de datos
+- **AutoMapper** para mapeo de objetos
+- **IMPORTANTE**: Un solo proyecto .csproj con las capas organizadas como carpetas (NO proyectos separados) para mayor agilidad en desarrollo y pruebas locales
+
+### Seguridad (Fase 1)
+- **SIN autenticación** por ahora (prototipo funcional)
+- Preparar estructura para futura implementación de API Key en appsettings.json
+
+## 🏗️ MODELO DE DATOS
+
+### Entidad: Propiedad (Property)
+```csharp
+- PropertyId: string (PK) // Formato: "TIPO-ZONA-NUMERO" ej: "CASA-NORTE-12345"
+- PropertyCode: string (único) // Código interno generado automáticamente
+- Type: enum (Terreno, Casa, Departamento, LocalComercial, Oficina)
+- Status: enum (EnVenta, EnAlquiler, EnAnticredito, Vendido, NoDisponible)
+- Title: string (100 caracteres max)
+- Description: string (1000 caracteres max)
+- Price: decimal(18,2)
+- Area: decimal(10,2) // Metros cuadrados
+- Zone: enum (Norte, Sur, Este, Oeste, Centro)
+- Address: string (200 caracteres max)
+- Bedrooms: int? (nullable, solo para Casa/Departamento)
+- Bathrooms: int? (nullable)
+- ParkingSpots: int? (nullable)
+- HasImages: bool // Indica si tiene imágenes
+- ImageUrls: string (JSON array serializado) // URLs de imágenes (max 10)
+- AvailableDate: DateTime
+- ClosedDate: DateTime? (nullable) // Fecha de venta/baja
+- CreatedAt: DateTime
+- UpdatedAt: DateTime
+- AdvisorId: int (FK)
+```
+
+### Entidad: Asesor (Advisor)
+```csharp
+- AdvisorId: int (PK, Identity)
+- FullName: string (100 caracteres max, requerido)
+- Email: string? (nullable, validar formato)
+- PrimaryPhone: string (20 caracteres max, requerido)
+- SecondaryPhone: string? (nullable)
+- IsActive: bool (default: true)
+- CreatedAt: DateTime
+```
+
+### Relaciones
+- Un Asesor puede tener muchas Propiedades (1:N)
+
+## 🔧 ENDPOINTS REQUERIDOS
+
+### Propiedades
+```
+POST   /api/properties              - Crear propiedad
+GET    /api/properties              - Listar con paginación y filtros
+GET    /api/properties/{id}         - Obtener por ID
+PUT    /api/properties/{id}         - Actualizar propiedad
+PATCH  /api/properties/{id}/status  - Cambiar estado
+DELETE /api/properties/{id}         - Eliminar (soft delete recomendado)
+
+# Filtros para GET /api/properties:
+- ?type=Casa
+- ?status=EnVenta
+- ?minPrice=100000&maxPrice=500000
+- ?zone=Norte
+- ?minArea=50&maxArea=200
+- ?advisorId=1
+- ?page=1&pageSize=20
+```
+
+### Asesores
+```
+POST   /api/advisors                - Crear asesor
+GET    /api/advisors                - Listar todos
+GET    /api/advisors/{id}           - Obtener por ID
+PUT    /api/advisors/{id}           - Actualizar asesor
+GET    /api/advisors/{id}/properties - Propiedades de un asesor
+```
+
+## ✅ REGLAS DE NEGOCIO
+
+1. **PropertyCode** se genera automáticamente: `{TIPO}-{ZONA}-{5_DIGITOS_ALEATORIOS}` (ej: "CASA-NORTE-47382")
+2. Una propiedad **Vendida o NoDisponible** debe registrar `ClosedDate` automáticamente
+3. No se puede cambiar estado de **Vendido** a **EnVenta** (una venta es definitiva para esa propiedad)
+4. Si se revende, debe crearse una **nueva propiedad**
+5. `Price` y `Area` deben ser mayores a 0
+6. `AvailableDate` no puede ser anterior a `CreatedAt`
+7. Al menos un teléfono (Primary o Secondary) es obligatorio para Advisor
+8. Validar formato de email si se proporciona
+
+## 📦 ESTRUCTURA DEL PROYECTO
+
+```
+RealEstateAPI/
+├── RealEstateAPI.sln                # Solución de Visual Studio
+├── RealEstateAPI/                   # Proyecto único .csproj
+│   ├── Controllers/                 # Capa de presentación
+│   ├── Application/                 # Lógica de aplicación
+│   │   ├── DTOs/
+│   │   ├── Interfaces/
+│   │   ├── Services/
+│   │   ├── Mappings/
+│   │   └── Validators/
+│   ├── Domain/                      # Entidades y lógica de dominio
+│   │   ├── Entities/
+│   │   ├── Enums/
+│   │   └── Interfaces/
+│   ├── Infrastructure/              # Acceso a datos
+│   │   ├── Data/
+│   │   │   ├── ApplicationDbContext.cs
+│   │   │   └── Seed/
+│   │   ├── Repositories/
+│   │   └── Configurations/
+│   ├── Middlewares/
+│   ├── Program.cs
+│   ├── appsettings.json
+│   ├── appsettings.Development.json
+│   ├── RealEstateAPI.csproj
+│   └── Dockerfile
+└── docker-compose.yml
+```
+
+## ⚙️ CONFIGURACIÓN REQUERIDA
+
+### appsettings.json
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost,1433;Database=RealEstateDB;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*",
+  "ApiSettings": {
+    "Version": "v1",
+    "Title": "Real Estate API",
+    "Description": "API para gestión de propiedades inmobiliarias"
+  }
+}
+```
+
+### appsettings.Development.json
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=sqlserver;Database=RealEstateDB;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;"
+  }
+}
+```
+
+## 🐳 DOCKER
+
+### Dockerfile (para API)
+- Multi-stage build
+- Usar imagen `mcr.microsoft.com/dotnet/aspnet:8.0` para runtime
+- Exponer puerto 8080
+
+### docker-compose.yml
+```yaml
+services:
+  sqlserver:
+    - SQL Server 2022
+    - Persistencia con volumen
+    - Puerto 1433
+  
+  api:
+    - Depende de sqlserver
+    - Espera a que SQL Server esté listo
+    - Puerto 5000:8080
+    - Variables de entorno para ConnectionString
+```
+
+## 📊 DATOS DE PRUEBA (SEED DATA)
+
+Generar automáticamente al ejecutar migraciones:
+- **5 Asesores** con datos realistas
+- **20 Propiedades** variadas:
+  - Diferentes tipos, estados, zonas
+  - Precios entre $50,000 y $5,000,000
+  - Áreas entre 30m² y 500m²
+  - Distribuidas entre los asesores
+  - Algunas con imágenes de ejemplo (URLs de placeholder)
+
+## 📝 ENTREGABLES
+
+Genera TODO lo siguiente en UN SOLO RESPONSE:
+
+1. **RealEstateAPI.sln** (archivo de solución)
+2. **RealEstateAPI.csproj** con todas las dependencias necesarias
+3. **Código completo** de todas las capas organizadas en carpetas
+4. **Program.cs** configurado (DI, Swagger, EF Core, CORS)
+5. **ApplicationDbContext** con configuraciones Fluent API
+6. **Migraciones** (comandos a ejecutar)
+7. **Dockerfile** optimizado
+8. **docker-compose.yml** funcional
+9. **README.md** con:
+   - Instrucciones de ejecución
+   - Endpoints disponibles
+   - Ejemplos de requests con cURL
+   - Comandos Docker
+10. **.gitignore** para .NET
+
+## 🎨 REQUISITOS DE CALIDAD
+
+- **Código limpio**: nombres descriptivos, métodos cortos, principios SOLID
+- **Comentarios**: solo en lógica compleja
+- **Manejo de errores**: try-catch, responses HTTP apropiados
+- **Validaciones**: FluentValidation o Data Annotations
+- **Logging**: usar ILogger
+- **Paginación**: implementar en listados
+- **DTOs separados**: Request/Response diferentes de entidades
+- **AutoMapper**: configurado y funcional
+
+## 🚀 CRITERIOS DE ÉXITO
+
+La aplicación debe:
+✅ Compilar sin errores  
+✅ Ejecutarse con `docker-compose up`  
+✅ Crear base de datos automáticamente  
+✅ Cargar datos de prueba  
+✅ Swagger accesible en `http://localhost:5000/swagger`  
+✅ Todos los endpoints funcionales  
+✅ Respuestas JSON correctamente formateadas  
+✅ Validaciones funcionando  
+
+---
+
+**IMPORTANTE**: Genera TODO el código necesario. No uses placeholders como "// Implementar aquí". Cada archivo debe estar completo y listo para copiar/pegar. La aplicación debe funcionar al 100% después de seguir las instrucciones del README. Recuerda: UN SOLO PROYECTO .csproj con arquitectura en capas mediante carpetas.
+```
